@@ -68,7 +68,11 @@ function resolveWpRuntime(wordpressRoot: string): WpRuntime {
 }
 
 export function firstNumericWpId(output: string): string | undefined {
-  return output.split(/\s+/).find((value) => /^\d+$/.test(value));
+  return numericWpIds(output).at(-1);
+}
+
+export function numericWpIds(output: string): string[] {
+  return output.split(/\r?\n/).map((value) => value.trim()).filter((value) => /^\d+$/.test(value));
 }
 
 export class WordPressClient implements WordPressGateway {
@@ -127,7 +131,9 @@ export class WordPressClient implements WordPressGateway {
       `--meta_value=${homepageId}`,
       "--field=ID"
     ]);
-    return firstNumericWpId(output);
+    const ids = numericWpIds(output);
+    if (ids.length > 1) throw new Error(`Multiple WordPress Pages claim homepage ownership: ${homepageId}`);
+    return ids[0];
   }
 
   private async slugPageId(slug: string): Promise<string | undefined> {
@@ -138,7 +144,9 @@ export class WordPressClient implements WordPressGateway {
       `--name=${slug}`,
       "--field=ID"
     ]);
-    return firstNumericWpId(output);
+    const ids = numericWpIds(output);
+    if (ids.length > 1) throw new Error(`Multiple WordPress Pages use homepage slug: ${slug}`);
+    return ids[0];
   }
 
   async createOrUpdatePreview(

@@ -7,6 +7,8 @@
 - any critical production advisory;
 - any production package outside the reviewed allowlist in
   `scripts/audit-dependencies.mjs`.
+- any advisory source other than the two explicitly reviewed npm advisory
+  sources `1119441` and `1124334`.
 
 The deterministic CI job runs this policy on every pull request and push to
 `main`. Dependabot checks npm and GitHub Actions monthly. An allowlisted

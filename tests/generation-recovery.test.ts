@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { CheckpointStore } from "../src/generation/checkpoint.js";
+import {
+  CheckpointStore,
+  cleanupExpiredStaging
+} from "../src/generation/checkpoint.js";
 import { buildPageTemplate, normalizeGeneratedHtml } from "../src/generation/html.js";
 import { buildManifest, validateManifest } from "../src/domain/manifest.js";
 import { validateGeneratedHomepage } from "../src/validation/homepage.js";
@@ -109,6 +112,64 @@ describe("checkpoint and installation recovery", () => {
     expect(await store.load()).toBeUndefined();
   });
 
+  test("keeps valid sections while making a corrupted section resumable", async () => {
+    const root = await temporaryRoot();
+    const row = baseRow({ homepage_status: "generating" });
+    const plan = homepagePlan();
+    const manifest = buildManifest(row, plan, "/theme", "approved/model", "instance-001", "run-one", inference());
+    const store = new CheckpointStore(path.join(root, "homepages"), row.homepage_id);
+    let checkpoint = await store.initialize(row, "/theme", "approved/model", "instance-001", plan, inference(), manifest);
+    for (const part of manifest.parts.slice(0, 2)) {
+      checkpoint = await store.saveSection(
+        checkpoint,
+        part,
+        `<section><h2>${part.key}</h2></section>`,
+        inference("section")
+      );
+    }
+    await fs.writeFile(
+      path.join(store.partsRoot, manifest.parts[0]!.filename),
+      "corrupted checkpoint part"
+    );
+    const resumed = await store.loadCompatible(row, "/theme", "approved/model", "instance-001");
+    expect(resumed?.completed_parts.map((part) => part.key)).toEqual([manifest.parts[1]!.key]);
+    expect(resumed?.manifest.parts[0]?.checksum_sha256).toBeUndefined();
+    expect(resumed?.manifest.parts[1]?.checksum_sha256).toHaveLength(64);
+  });
+
+  test("invalidates checkpoint and manifest provenance mismatches", async () => {
+    const root = await temporaryRoot();
+    const row = baseRow({ homepage_status: "generating" });
+    const plan = homepagePlan();
+    const manifest = buildManifest(row, plan, "/theme", "approved/model", "instance-001", "run-one", inference());
+    const store = new CheckpointStore(path.join(root, "homepages"), row.homepage_id);
+    await store.initialize(row, "/theme", "approved/model", "instance-001", plan, inference(), {
+      ...manifest,
+      model_instance_id: "unexpected-instance"
+    });
+    await expect(
+      store.loadCompatible(row, "/theme", "approved/model", "instance-001")
+    ).resolves.toBeUndefined();
+    expect(await store.load()).toBeUndefined();
+    expect(
+      (await fs.readdir(store.homepageRoot)).some((name) => name.startsWith("invalid-checkpoint-"))
+    ).toBe(true);
+  });
+
+  test("removes only expired staging evidence", async () => {
+    const root = await temporaryRoot();
+    const staging = path.join(root, "staging");
+    const expired = path.join(staging, "expired-run");
+    const current = path.join(staging, "current-run");
+    await fs.mkdir(expired, { recursive: true });
+    await fs.mkdir(current, { recursive: true });
+    const old = new Date(Date.now() - 120_000);
+    await fs.utimes(expired, old, old);
+    expect(await cleanupExpiredStaging(staging, 60_000)).toBe(1);
+    await expect(fs.stat(expired)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(fs.stat(current)).resolves.toBeDefined();
+  });
+
   test("rolls back files copied before a later destination conflict", async () => {
     const root = await temporaryRoot();
     const staging = path.join(root, "staging");
@@ -128,5 +189,55 @@ describe("checkpoint and installation recovery", () => {
     await expect(installHomepage(staging, theme, manifest)).rejects.toThrow(/Refusing to overwrite/);
     await expect(fs.stat(path.join(theme, "page-templates", manifest.template_filename))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await fs.readFile(conflict, "utf8")).toBe("different existing content");
+  });
+
+  test("refuses a theme destination directory that escapes through a symlink", async () => {
+    const root = await temporaryRoot();
+    const staging = path.join(root, "staging");
+    const theme = path.join(root, "theme");
+    const outside = path.join(root, "outside");
+    const manifest = buildManifest(baseRow(), homepagePlan(), theme, "approved/model", "instance-001", "run-one", inference());
+    await fs.mkdir(path.join(staging, "page-templates"), { recursive: true });
+    await fs.mkdir(path.join(staging, "template-parts", "homepage"), { recursive: true });
+    await fs.mkdir(theme, { recursive: true });
+    await fs.mkdir(outside, { recursive: true });
+    await fs.symlink(outside, path.join(theme, "page-templates"));
+    await fs.writeFile(
+      path.join(staging, "page-templates", manifest.template_filename),
+      "safe staged template"
+    );
+    for (const part of manifest.parts) {
+      await fs.writeFile(
+        path.join(staging, "template-parts", "homepage", part.filename),
+        "safe staged part"
+      );
+    }
+    await expect(installHomepage(staging, theme, manifest)).rejects.toThrow(/non-directory theme path component/);
+    expect(await fs.readdir(outside)).toEqual([]);
+  });
+
+  test("does not create a nested directory through a symlinked theme parent", async () => {
+    const root = await temporaryRoot();
+    const staging = path.join(root, "staging");
+    const theme = path.join(root, "theme");
+    const outside = path.join(root, "outside");
+    const manifest = buildManifest(baseRow(), homepagePlan(), theme, "approved/model", "instance-001", "run-one", inference());
+    await fs.mkdir(path.join(staging, "page-templates"), { recursive: true });
+    await fs.mkdir(path.join(staging, "template-parts", "homepage"), { recursive: true });
+    await fs.mkdir(path.join(theme, "page-templates"), { recursive: true });
+    await fs.mkdir(outside, { recursive: true });
+    await fs.symlink(outside, path.join(theme, "template-parts"));
+    await fs.writeFile(
+      path.join(staging, "page-templates", manifest.template_filename),
+      "safe staged template"
+    );
+    for (const part of manifest.parts) {
+      await fs.writeFile(
+        path.join(staging, "template-parts", "homepage", part.filename),
+        "safe staged part"
+      );
+    }
+    await expect(installHomepage(staging, theme, manifest)).rejects.toThrow(/non-directory theme path component/);
+    await expect(fs.stat(path.join(outside, "homepage"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

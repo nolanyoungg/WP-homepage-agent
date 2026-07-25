@@ -5,7 +5,7 @@ over a trusted private network. This mode is separate from LM Link.
 
 ## Inference device
 
-1. Install LM Studio 0.4.0 or newer.
+1. Install LM Studio 0.4.8 or newer and confirm that version in the app.
 2. Download the approved LLM manually. The agent never downloads models.
 3. In the Developer page, start the local server and enable serving on the
    private network.
@@ -29,7 +29,8 @@ LMSTUDIO_PRIMARY_MODEL=openai/gpt-oss-20b
 LMSTUDIO_FALLBACK_MODELS=
 LMSTUDIO_MODEL_POLICY=required-loaded
 LMSTUDIO_REASONING=low
-LMSTUDIO_MIN_VERSION=0.4.0
+LMSTUDIO_MIN_VERSION=0.4.8
+LMSTUDIO_CONFIRMED_VERSION=0.4.8
 ```
 
 Use the exact model key returned by the native model API. Fallbacks must be an
@@ -62,7 +63,7 @@ Do not publish model logs; the model stream includes inputs and outputs.
 | --- | --- |
 | `connection` or timeout | Server running, private DNS/address, firewall, port, and configured timeout. |
 | `authentication` | Token belongs to this server and authentication is consistently enabled. |
-| `api-version` | LM Studio is 0.4.0+ and `/api/v1/models` is available. |
+| `api-version` | LM Studio is 0.4.8+, the confirmed version matches `.env`, and `/api/v1/models` is available. |
 | `model-missing` | Exact primary/fallback key is downloaded on this device. |
 | `model-not-loaded` | Load it or explicitly select `load-installed`. |
 | `model-type` | The selected resource must be `llm`, not embedding. |

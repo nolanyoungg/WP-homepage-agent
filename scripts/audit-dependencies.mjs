@@ -12,6 +12,7 @@ const documentedAllowlist = new Set([
   "uuid",
   "zip-stream"
 ]);
+const documentedAdvisorySources = new Set([1119441, 1124334]);
 
 const result = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
   encoding: "utf8",
@@ -31,19 +32,28 @@ const names = Object.keys(vulnerabilities);
 const critical = names.filter((name) => vulnerabilities[name]?.severity === "critical");
 const unexpected = names.filter((name) => !documentedAllowlist.has(name));
 const direct = names.filter((name) => vulnerabilities[name]?.isDirect);
+const advisorySources = names.flatMap((name) =>
+  (vulnerabilities[name]?.via ?? [])
+    .filter((entry) => entry && typeof entry === "object" && typeof entry.source === "number")
+    .map((entry) => entry.source)
+);
+const unexpectedAdvisories = [...new Set(advisorySources)]
+  .filter((source) => !documentedAdvisorySources.has(source));
 
 const summary = {
   policy: "fail-critical-or-unreviewed",
   production_vulnerabilities: report.metadata?.vulnerabilities ?? {},
   direct_dependencies: direct,
   documented_allowlist: [...documentedAllowlist].filter((name) => names.includes(name)),
-  unexpected_dependencies: unexpected
+  documented_advisory_sources: [...documentedAdvisorySources],
+  unexpected_dependencies: unexpected,
+  unexpected_advisory_sources: unexpectedAdvisories
 };
 process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 
-if (critical.length || unexpected.length) {
+if (critical.length || unexpected.length || unexpectedAdvisories.length) {
   process.stderr.write(
-    `Dependency policy failed. Critical: ${critical.join(", ") || "none"}; unreviewed: ${unexpected.join(", ") || "none"}\n`
+    `Dependency policy failed. Critical: ${critical.join(", ") || "none"}; unreviewed packages: ${unexpected.join(", ") || "none"}; unreviewed advisories: ${unexpectedAdvisories.join(", ") || "none"}\n`
   );
   process.exit(1);
 }

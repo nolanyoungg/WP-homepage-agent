@@ -32,7 +32,7 @@ automatically, simulate inference, or trust model output as executable code.
 - Node.js 20 or newer
 - PHP available on `PATH`
 - WP-CLI and a running Local WordPress site
-- LM Studio 0.4.0 or newer, or LM Link between the workflow and inference
+- LM Studio 0.4.8 or newer, or LM Link between the workflow and inference
   devices
 - The approved LLM already downloaded; the default policy also requires it to
   be loaded
@@ -40,11 +40,13 @@ automatically, simulate inference, or trust model output as executable code.
 - For approval messaging: the integrated Mac relay or direct macOS Messages
   adapter
 
-LM Studio's native v1 API and API-token support began in 0.4.0. The worker
-requires `/api/v1/models`, so older installations fail preflight instead of
-silently using another API. The documented API does not expose the desktop app
-version; confirm the installed version in LM Studio and keep
-`LMSTUDIO_MIN_VERSION=0.4.0` or higher.
+LM Studio's native v1 API and API-token support began in 0.4.0, while the
+OpenAI-compatible `reasoning_effort` parameter and native reasoning-capability
+metadata used by this worker require 0.4.8. The documented API does not expose
+the desktop app version, so confirm it in LM Studio and set
+`LMSTUDIO_CONFIRMED_VERSION` to the observed version. Configuration below
+`LMSTUDIO_MIN_VERSION=0.4.8` is rejected, and the capability preflight still
+has to pass.
 
 ## First run
 
@@ -148,7 +150,8 @@ message. `IMESSAGE_ADAPTER=dry-run` never sends or supplies an approval.
 ## LM Studio and LM Link
 
 The worker sends API tokens on every LM Studio request when
-`LMSTUDIO_API_TOKEN` is set. It uses:
+`LMSTUDIO_API_TOKEN` is set and includes the safe workflow run ID on every
+request. It uses:
 
 - `GET /api/v1/models` for the approved model, LLM type, loaded instance, and
   reasoning capability

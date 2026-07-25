@@ -94,6 +94,16 @@ export class CheckpointStore {
       const parsed = checkpointSchema.parse(JSON.parse(await fs.readFile(this.checkpointFile, "utf8")));
       const manifest = validateManifest(parsed.manifest);
       if (planChecksum(parsed.plan) !== parsed.plan_checksum_sha256) throw new Error("Checkpoint plan checksum does not match");
+      if (
+        manifest.homepage_id !== parsed.homepage_id
+        || manifest.target_theme_path !== parsed.target_theme_path
+        || manifest.model !== parsed.model_key
+        || manifest.model_instance_id !== parsed.model_instance_id
+        || manifest.prompt_version !== parsed.prompt_version
+        || manifest.plan_checksum_sha256 !== parsed.plan_checksum_sha256
+      ) {
+        throw new Error("Checkpoint manifest provenance does not match the checkpoint");
+      }
       return { ...parsed, manifest } as HomepageCheckpoint;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
@@ -107,21 +117,53 @@ export class CheckpointStore {
     modelKey: string,
     modelInstanceId: string
   ): Promise<HomepageCheckpoint | undefined> {
-    const checkpoint = await this.load();
+    let checkpoint: HomepageCheckpoint | undefined;
+    try {
+      checkpoint = await this.load();
+    } catch (error) {
+      await this.invalidate(`checkpoint validation failed: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
     if (!checkpoint) return undefined;
     const expected = CheckpointStore.inputChecksum(row, themePath, modelKey, modelInstanceId);
     if (checkpoint.input_checksum_sha256 !== expected) {
       await this.invalidate("generation inputs changed");
       return undefined;
     }
+    const invalidKeys = new Set<string>();
     for (const completed of checkpoint.completed_parts) {
       const filePath = path.join(this.partsRoot, completed.filename);
       assertPathInside(this.partsRoot, filePath);
-      const actual = checksumBuffer(await fs.readFile(filePath));
-      if (actual !== completed.checksum_sha256) {
-        await this.invalidate(`checkpoint part checksum changed: ${completed.filename}`);
-        return undefined;
+      try {
+        const actual = checksumBuffer(await fs.readFile(filePath));
+        if (actual !== completed.checksum_sha256) invalidKeys.add(completed.key);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        invalidKeys.add(completed.key);
       }
+    }
+    if (invalidKeys.size) {
+      for (const completed of checkpoint.completed_parts) {
+        if (invalidKeys.has(completed.key)) {
+          await fs.rm(path.join(this.partsRoot, completed.filename), { force: true });
+        }
+      }
+      checkpoint = {
+        ...checkpoint,
+        completed_parts: checkpoint.completed_parts.filter((entry) => !invalidKeys.has(entry.key)),
+        manifest: {
+          ...checkpoint.manifest,
+          parts: checkpoint.manifest.parts.map((part) => {
+            if (!invalidKeys.has(part.key)) return part;
+            const withoutGeneratedEvidence = { ...part };
+            delete withoutGeneratedEvidence.checksum_sha256;
+            delete withoutGeneratedEvidence.inference;
+            return withoutGeneratedEvidence;
+          })
+        },
+        updated_at: new Date().toISOString()
+      };
+      await writeJsonAtomic(this.checkpointFile, checkpoint);
     }
     return checkpoint;
   }
@@ -249,6 +291,32 @@ export async function cleanupExpiredCheckpoints(homepageDataRoot: string, maximu
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return removed;
+}
+
+export async function cleanupExpiredStaging(stagingRoot: string, maximumAgeMs: number): Promise<number> {
+  let removed = 0;
+  let entries: Dirent[];
+  try {
+    const rootDetails = await fs.lstat(stagingRoot);
+    if (rootDetails.isSymbolicLink() || !rootDetails.isDirectory()) {
+      throw new Error("Staging root must be a real directory");
+    }
+    entries = await fs.readdir(stagingRoot, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const directory = path.join(stagingRoot, entry.name);
+    assertPathInside(stagingRoot, directory);
+    const details = await fs.stat(directory);
+    if (Date.now() - details.mtimeMs > maximumAgeMs) {
+      await fs.rm(directory, { recursive: true, force: true });
+      removed += 1;
     }
   }
   return removed;

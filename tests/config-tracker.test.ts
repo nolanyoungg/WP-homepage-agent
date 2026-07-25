@@ -23,6 +23,7 @@ function environment(root: string): NodeJS.ProcessEnv {
   return {
     LMSTUDIO_BASE_URL: "http://127.0.0.1:1234",
     LMSTUDIO_PRIMARY_MODEL: "approved/model",
+    LMSTUDIO_CONFIRMED_VERSION: "0.4.8",
     TRACKER_PATH: path.join(root, "tracker.xlsx"),
     LOCAL_WORDPRESS_ROOT: wordpressRoot,
     THEME_PATH: path.join(wordpressRoot, "wp-content", "themes", "nolan-young-theme-template-02"),
@@ -39,7 +40,8 @@ describe("configuration", () => {
     const config = loadConfig(environment(root));
     expect(config.lmStudio.seed).toBe(42);
     expect(config.lmStudio.generationConcurrency).toBe(1);
-    expect(config.lmStudio.minimumVersion).toBe("0.4.0");
+    expect(config.lmStudio.minimumVersion).toBe("0.4.8");
+    expect(config.lmStudio.confirmedVersion).toBe("0.4.8");
     expect(config.themePath.endsWith("nolan-young-theme-template-02")).toBe(true);
   });
 
@@ -68,8 +70,13 @@ describe("configuration", () => {
     const root = await temporaryRoot();
     expect(() => loadConfig({
       ...environment(root),
-      LMSTUDIO_MIN_VERSION: "0.3.29"
-    })).toThrow(/cannot be lower than 0.4.0/);
+      LMSTUDIO_MIN_VERSION: "0.4.7"
+    })).toThrow(/cannot be lower than 0.4.8/);
+    expect(() => loadConfig({
+      ...environment(root),
+      LMSTUDIO_MIN_VERSION: "0.4.9",
+      LMSTUDIO_CONFIRMED_VERSION: "0.4.8"
+    })).toThrow(/LMSTUDIO_CONFIRMED_VERSION must be at least 0.4.9/);
   });
 
   test("rejects committed credential placeholders", async () => {
@@ -78,6 +85,18 @@ describe("configuration", () => {
       ...environment(root),
       LIVE_LINK_PASSWORD: "replace-with-live-link-password"
     })).toThrow(/Replace the Local Live Link placeholders/);
+  });
+
+  test("rejects credentials and paths embedded in service origins", async () => {
+    const root = await temporaryRoot();
+    expect(() => loadConfig({
+      ...environment(root),
+      LMSTUDIO_BASE_URL: "http://user:password@127.0.0.1:1234"
+    })).toThrow(/LMSTUDIO_BASE_URL must be an origin/);
+    expect(() => loadConfig({
+      ...environment(root),
+      LIVE_LINK_URL: "https://preview.example.test/private-path"
+    })).toThrow(/LIVE_LINK_URL must be an origin/);
   });
 
   test("documents every supported environment variable", async () => {

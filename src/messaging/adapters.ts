@@ -24,7 +24,7 @@ const relayDelivery = relayEnvelope(z.object({
 const relayReplies = relayEnvelope(z.object({
   replies: z.array(z.object({
     id: z.string().optional(),
-    text: z.string(),
+    text: z.string().max(10_000),
     sender: z.string(),
     receivedAt: z.string().datetime()
   })).max(100)

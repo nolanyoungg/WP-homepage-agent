@@ -40,6 +40,27 @@
 
 ### Fixed
 
+- Correct the minimum LM Studio policy from 0.4.0 to 0.4.8, the release that
+  added the `reasoning_effort` and native reasoning-capability behavior used by
+  the default configuration, and require an explicit installed-version
+  attestation.
+- Accept both documented native load-response instance field names, verify the
+  model identifier returned by each completion, retry HTTP 408 as a classified
+  timeout, and attach the workflow run ID to every LM Studio request.
+- Preserve failed validation/preview staging evidence until expiry, retain
+  valid checkpoint sections when one section is missing or corrupt, verify all
+  checkpoint/manifest provenance, and restrict recovery to canonical manifest
+  paths.
+- Reject symlink escapes during theme installation, strip credentials from
+  child-process environments, constrain service configuration to credential-
+  free HTTP(S) origins, and prevent authenticated render checks from following
+  redirects outside their configured origin.
+- Require byte-exact approval replies, cap relay response bodies, interrupt
+  worker backoff immediately on shutdown signals, and fail dependency policy on
+  new advisory sources even when they affect an already reviewed package.
+- Avoid persisting raw LM Link device/status data, ignore numeric fragments in
+  WP-CLI warnings when resolving Page IDs, and fail on ambiguous Page ownership
+  or slug results.
 - Reject duplicate homepage IDs, same-day filename collisions, unsafe SVG/
   active HTML, mixed unsafe `srcset` values, protocol-relative URLs, stale
   locks, and unbounded subprocess execution.
@@ -88,6 +109,15 @@
   `deterministic-validation` run passed; upgraded the two official GitHub
   Actions to their Node 24 runtime releases to remove the runner's Node 20
   action-deprecation annotation before final CI validation.
+- 2026-07-25 14:15 America/New_York: Passed strict compilation, ESLint, and 43
+  deterministic tests after adding official LM Studio 0.4.8 contract
+  corrections, checkpoint/staging evidence recovery, symlink-safe
+  installation, bounded relay responses, redirect and subprocess credential
+  controls, exact WP-CLI ID parsing, and regression coverage for each.
+- 2026-07-25 14:16 America/New_York: Reattempted the live LM Studio preflight;
+  the development host still had no private `.env`, required runtime
+  configuration, or `lms` CLI, so LM Studio, LM Link, WordPress, Live Link,
+  Messages, and real-model artifact validation remain explicitly unclaimed.
 
 ## 0.1.0 - 2026-07-24
 

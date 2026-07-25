@@ -1,5 +1,13 @@
 import { spawn } from "node:child_process";
 
+const sensitiveEnvironmentName = /(?:password|token|secret|credential|authorization|api[_-]?key)/i;
+
+function subprocessEnvironment(): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !sensitiveEnvironmentName.test(name))
+  );
+}
+
 export interface ProcessResult {
   stdout: string;
   stderr: string;
@@ -15,6 +23,7 @@ export async function runProcess(
     const child = spawn(command, args, {
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      env: subprocessEnvironment(),
       ...(options.cwd ? { cwd: options.cwd } : {})
     });
     let stdout = "";

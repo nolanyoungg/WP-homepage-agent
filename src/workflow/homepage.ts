@@ -12,7 +12,11 @@ import type {
   TrackerRow,
   WorkflowRunResult
 } from "../domain/types.js";
-import { CheckpointStore, cleanupExpiredCheckpoints } from "../generation/checkpoint.js";
+import {
+  CheckpointStore,
+  cleanupExpiredCheckpoints,
+  cleanupExpiredStaging
+} from "../generation/checkpoint.js";
 import { LmStudioClient } from "../lmstudio/client.js";
 import { redact, SafeRunLogger } from "../logging/logger.js";
 import { approvalText, parseApproval } from "../messaging/approval.js";
@@ -100,6 +104,10 @@ export class HomepageWorkflow {
       this.config.operations.homepageDataDir,
       this.config.operations.checkpointMaxAgeMs
     );
+    const removedStaging = await cleanupExpiredStaging(
+      path.resolve(".staging"),
+      this.config.operations.checkpointMaxAgeMs
+    );
     await this.lm.healthCheck();
     if (requireWordPress) {
       await this.wordpress.healthCheck();
@@ -114,6 +122,7 @@ export class HomepageWorkflow {
       require_messaging: requireMessaging,
       require_wordpress: requireWordPress,
       expired_checkpoints_removed: removed,
+      expired_staging_directories_removed: removedStaging,
       connection_mode: this.config.lmStudio.connectionMode
     });
   }
@@ -245,6 +254,17 @@ export class HomepageWorkflow {
     return current;
   }
 
+  private canonicalManifestPath(row: TrackerRow): string {
+    const expected = new CheckpointStore(
+      this.config.operations.homepageDataDir,
+      row.homepage_id
+    ).manifestFile;
+    if (!row.manifest_path || path.resolve(row.manifest_path).toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(`Tracker manifest_path must be the canonical homepage manifest: ${expected}`);
+    }
+    return expected;
+  }
+
   private async generateAndRequestReview(initialRow: TrackerRow): Promise<void> {
     let row = initialRow;
     let state: HomepageState = row.homepage_status;
@@ -257,6 +277,7 @@ export class HomepageWorkflow {
     const store = new CheckpointStore(this.config.operations.homepageDataDir, row.homepage_id);
     const stagingRoot = path.resolve(".staging", `${row.homepage_id}-${this.runId}`);
     assertPathInside(path.resolve(".staging"), stagingRoot);
+    let preserveStaging = false;
     try {
       let checkpoint = await store.loadCompatible(
         row,
@@ -383,6 +404,9 @@ export class HomepageWorkflow {
       }
     } catch (error) {
       const message = safeErrorMessage(this.config, error);
+      preserveStaging = await fs.stat(stagingRoot)
+        .then((details) => details.isDirectory())
+        .catch(() => false);
       const current = await this.tracker.find(row.homepage_id).catch(() => undefined);
       if (current && ["planning", "generating", "validating"].includes(current.homepage_status)) {
         await this.tracker.patch(row.homepage_id, {
@@ -394,16 +418,19 @@ export class HomepageWorkflow {
         homepage_id: row.homepage_id,
         state,
         error: message,
-        checkpoint_preserved: true
+        checkpoint_preserved: true,
+        staging_preserved: preserveStaging,
+        ...(preserveStaging ? { staging_path: stagingRoot } : {})
       });
       throw error;
     } finally {
-      await fs.rm(stagingRoot, { recursive: true, force: true });
+      if (!preserveStaging) await fs.rm(stagingRoot, { recursive: true, force: true });
     }
   }
 
   private async resumeInstalledPreview(row: TrackerRow): Promise<void> {
-    const manifest = validateManifest(JSON.parse(await fs.readFile(row.manifest_path, "utf8")));
+    const manifestPath = this.canonicalManifestPath(row);
+    const manifest = validateManifest(JSON.parse(await fs.readFile(manifestPath, "utf8")));
     if (path.resolve(manifest.target_theme_path).toLowerCase() !== this.config.themePath.toLowerCase()) {
       throw new Error("Resume manifest target does not match the designated theme");
     }
@@ -421,6 +448,7 @@ export class HomepageWorkflow {
       }))
     };
     const stagingRoot = path.resolve(".staging", `${row.homepage_id}-legacy-${this.runId}`);
+    let completed = false;
     try {
       await fs.mkdir(path.join(stagingRoot, "page-templates"), { recursive: true });
       await fs.mkdir(path.join(stagingRoot, "template-parts", "homepage"), { recursive: true });
@@ -440,7 +468,7 @@ export class HomepageWorkflow {
         manifest,
         safeSecrets(this.config)
       );
-      await writeManifest(row.manifest_path, checked);
+      await writeManifest(manifestPath, checked);
       const preview = await this.wordpress.createOrUpdatePreview(plan, checked, row.preview_page_id || undefined);
       await confirmUrl(preview.url);
       const liveUrl = buildLivePreviewUrl(this.config.liveLink.url, preview.url);
@@ -468,8 +496,16 @@ export class HomepageWorkflow {
           last_error: safeErrorMessage(this.config, error)
         }, "validating");
       }
+      completed = true;
     } finally {
-      await fs.rm(stagingRoot, { recursive: true, force: true });
+      if (completed) {
+        await fs.rm(stagingRoot, { recursive: true, force: true });
+      } else {
+        await this.logger.write("workflow.resume_staging_preserved", {
+          homepage_id: row.homepage_id,
+          staging_path: stagingRoot
+        });
+      }
     }
   }
 
@@ -624,7 +660,8 @@ export class HomepageWorkflow {
     let manifest: HomepageManifest | undefined;
     let manifestError: string | undefined;
     try {
-      manifest = validateManifest(JSON.parse(await fs.readFile(row.manifest_path, "utf8")));
+      const manifestPath = this.canonicalManifestPath(row);
+      manifest = validateManifest(JSON.parse(await fs.readFile(manifestPath, "utf8")));
     } catch (error) {
       manifestError = error instanceof Error ? error.message : String(error);
     }

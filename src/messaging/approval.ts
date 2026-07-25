@@ -32,7 +32,7 @@ export function parseApproval(
   }
   const yes = `YES ${homepageId} ${nonce} — make this preview the Local site's homepage`;
   const no = `NO ${homepageId} ${nonce} — reject it and leave the current Local homepage unchanged`;
-  if (message.text.trim() === yes) return "approved";
-  if (message.text.trim() === no) return "rejected";
+  if (message.text === yes) return "approved";
+  if (message.text === no) return "rejected";
   return undefined;
 }

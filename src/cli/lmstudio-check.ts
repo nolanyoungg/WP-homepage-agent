@@ -14,16 +14,24 @@ async function main(): Promise<void> {
   ]);
   let linkStatus: unknown;
   if (config.lmStudio.connectionMode === "lmlink") {
-    const result = await runProcess("lms", ["link", "status", "--json"], {
-      timeoutMs: config.lmStudio.healthTimeoutMs,
-      maxOutputBytes: 1_000_000
-    });
+    let result: Awaited<ReturnType<typeof runProcess>>;
+    try {
+      result = await runProcess("lms", ["link", "status", "--json"], {
+        timeoutMs: config.lmStudio.healthTimeoutMs,
+        maxOutputBytes: 1_000_000
+      });
+    } catch {
+      throw new Error("LM Link status check failed; run 'lms link status --json' on the workflow device");
+    }
     try {
       linkStatus = JSON.parse(result.stdout) as unknown;
     } catch {
       throw new Error("lms link status --json did not return valid JSON");
     }
-    await logger.write("lmlink.status_succeeded", { status: linkStatus });
+    await logger.write("lmlink.status_succeeded", {
+      status_checked: true,
+      response_type: Array.isArray(linkStatus) ? "array" : typeof linkStatus
+    });
   }
   const client = new LmStudioClient(config.lmStudio, logger);
   const selected = await client.healthCheck();
@@ -33,6 +41,7 @@ async function main(): Promise<void> {
     connection_mode: config.lmStudio.connectionMode,
     base_url: config.lmStudio.baseUrl,
     required_lm_studio_version: config.lmStudio.minimumVersion,
+    confirmed_lm_studio_version: config.lmStudio.confirmedVersion,
     native_api_version: "v1",
     model_key: selected.key,
     model_instance_id: selected.instanceId,

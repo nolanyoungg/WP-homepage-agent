@@ -69,7 +69,11 @@ async function main(): Promise<void> {
   }
   if (command === "worker") {
     let stopping = false;
-    const stop = (): void => { stopping = true; };
+    const delayController = new AbortController();
+    const stop = (): void => {
+      stopping = true;
+      delayController.abort();
+    };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
     await workflow.preflight({ force: true });
@@ -81,12 +85,24 @@ async function main(): Promise<void> {
           await delay(
             result.outcome === "no-work" || result.outcome === "awaiting-review"
               ? config.operations.idleBackoffMs
-              : config.operations.pollIntervalMs
-          );
+              : config.operations.pollIntervalMs,
+            undefined,
+            { signal: delayController.signal }
+          ).catch((error: unknown) => {
+            if (!stopping || !(error instanceof Error) || error.name !== "AbortError") throw error;
+          });
         }
       } catch (error) {
         process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        if (!stopping) await delay(config.operations.idleBackoffMs);
+        if (!stopping) {
+          await delay(config.operations.idleBackoffMs, undefined, {
+            signal: delayController.signal
+          }).catch((delayError: unknown) => {
+            if (!stopping || !(delayError instanceof Error) || delayError.name !== "AbortError") {
+              throw delayError;
+            }
+          });
+        }
       }
     }
     print({ outcome: "stopped", run_id: workflow.runId });

@@ -24,7 +24,8 @@ const schema = z.object({
   LMSTUDIO_CONNECTION_MODE: z.enum(["direct-lan", "lmlink"]).default("direct-lan"),
   LMSTUDIO_MODEL_POLICY: z.enum(["required-loaded", "load-installed"]).default("required-loaded"),
   LMSTUDIO_REASONING: z.enum(["off", "low", "medium", "high", "on"]).default("low"),
-  LMSTUDIO_MIN_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).default("0.4.0"),
+  LMSTUDIO_MIN_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/).default("0.4.8"),
+  LMSTUDIO_CONFIRMED_VERSION: z.string().regex(/^\d+\.\d+\.\d+$/),
   LMSTUDIO_HEALTH_TIMEOUT_MS: integer(10_000, 1_000, 120_000),
   LMSTUDIO_MODEL_LOAD_TIMEOUT_MS: integer(180_000, 5_000, 900_000),
   LMSTUDIO_PLAN_TIMEOUT_MS: integer(180_000, 5_000, 900_000),
@@ -81,6 +82,7 @@ export interface AppConfig {
     modelPolicy: LmStudioModelPolicy;
     reasoning: LmStudioReasoning;
     minimumVersion: string;
+    confirmedVersion: string;
     healthTimeoutMs: number;
     modelLoadTimeoutMs: number;
     planTimeoutMs: number;
@@ -151,15 +153,30 @@ function isPlaceholder(value: string): boolean {
   return /replace-with|put-[a-z-]+-here/i.test(value);
 }
 
+function requireHttpOrigin(name: string, value: string): URL {
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error(`${name} must use http or https`);
+  }
+  if (url.username || url.password || url.search || url.hash || !["", "/"].includes(url.pathname)) {
+    throw new Error(`${name} must be an origin without credentials, path, query, or fragment`);
+  }
+  return url;
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const value = schema.parse(env);
-  if (!versionAtLeast(value.LMSTUDIO_MIN_VERSION, "0.4.0")) {
-    throw new Error("LMSTUDIO_MIN_VERSION cannot be lower than 0.4.0 because this worker requires the native v1 API");
+  if (!versionAtLeast(value.LMSTUDIO_MIN_VERSION, "0.4.8")) {
+    throw new Error("LMSTUDIO_MIN_VERSION cannot be lower than 0.4.8 because this worker uses reasoning_effort and native reasoning capabilities");
   }
+  if (!versionAtLeast(value.LMSTUDIO_CONFIRMED_VERSION, value.LMSTUDIO_MIN_VERSION)) {
+    throw new Error(`LMSTUDIO_CONFIRMED_VERSION must be at least ${value.LMSTUDIO_MIN_VERSION}`);
+  }
+  const liveLinkUrl = requireHttpOrigin("LIVE_LINK_URL", value.LIVE_LINK_URL);
   if (
     isPlaceholder(value.LIVE_LINK_USERNAME)
     || isPlaceholder(value.LIVE_LINK_PASSWORD)
-    || new URL(value.LIVE_LINK_URL).hostname.startsWith("example-")
+    || liveLinkUrl.hostname.startsWith("example-")
   ) {
     throw new Error("Replace the Local Live Link placeholders before running the workflow");
   }
@@ -173,7 +190,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error("THEME_PATH is outside the Local WordPress themes directory");
   }
 
-  const baseUrl = value.LMSTUDIO_BASE_URL.replace(/\/$/, "");
+  const baseUrl = requireHttpOrigin("LMSTUDIO_BASE_URL", value.LMSTUDIO_BASE_URL).origin;
   if (value.LMSTUDIO_CONNECTION_MODE === "lmlink" && !loopbackHost(baseUrl)) {
     throw new Error("LM Link mode requires LMSTUDIO_BASE_URL to use localhost or 127.0.0.1; LM Studio routes the request to the linked device");
   }
@@ -199,6 +216,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     if (isPlaceholder(value.IMESSAGE_RELAY_TOKEN)) {
       throw new Error("Replace the relay-token placeholder before running the workflow");
     }
+    requireHttpOrigin("IMESSAGE_RELAY_URL", value.IMESSAGE_RELAY_URL);
   }
 
   return {
@@ -211,6 +229,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       modelPolicy: value.LMSTUDIO_MODEL_POLICY,
       reasoning: value.LMSTUDIO_REASONING,
       minimumVersion: value.LMSTUDIO_MIN_VERSION,
+      confirmedVersion: value.LMSTUDIO_CONFIRMED_VERSION,
       healthTimeoutMs: value.LMSTUDIO_HEALTH_TIMEOUT_MS,
       modelLoadTimeoutMs: value.LMSTUDIO_MODEL_LOAD_TIMEOUT_MS,
       planTimeoutMs: value.LMSTUDIO_PLAN_TIMEOUT_MS,
@@ -227,20 +246,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     wordpressRoot,
     themePath,
     liveLink: {
-      url: value.LIVE_LINK_URL.replace(/\/$/, ""),
+      url: liveLinkUrl.origin,
       username: value.LIVE_LINK_USERNAME,
       password: value.LIVE_LINK_PASSWORD
     },
     messaging: {
       adapter: value.IMESSAGE_ADAPTER,
-      ...(value.IMESSAGE_RELAY_URL ? { relayUrl: value.IMESSAGE_RELAY_URL.replace(/\/$/, "") } : {}),
+      ...(value.IMESSAGE_RELAY_URL ? { relayUrl: requireHttpOrigin("IMESSAGE_RELAY_URL", value.IMESSAGE_RELAY_URL).origin } : {}),
       ...(value.IMESSAGE_RELAY_TOKEN ? { relayToken: value.IMESSAGE_RELAY_TOKEN } : {}),
       ...(value.IMESSAGE_RECIPIENT ? { recipient: value.IMESSAGE_RECIPIENT } : {}),
       relayTimeoutMs: value.IMESSAGE_RELAY_TIMEOUT_MS,
       relayListenHost: value.IMESSAGE_RELAY_LISTEN_HOST,
       relayListenPort: value.IMESSAGE_RELAY_LISTEN_PORT,
       relayDataDir: path.resolve(value.IMESSAGE_RELAY_DATA_DIR),
-      chatDb: value.IMESSAGE_CHAT_DB.replace(/^~/, process.env.HOME ?? ""),
+      chatDb: value.IMESSAGE_CHAT_DB.replace(/^~/, env.HOME ?? process.env.HOME ?? ""),
       includeLiveLinkPassword: value.IMESSAGE_INCLUDE_LIVE_LINK_PASSWORD
     },
     operations: {
@@ -279,6 +298,6 @@ export function loadRelayServerConfig(env: NodeJS.ProcessEnv = process.env): Rel
     host: value.IMESSAGE_RELAY_LISTEN_HOST,
     port: value.IMESSAGE_RELAY_LISTEN_PORT,
     dataDir: path.resolve(value.IMESSAGE_RELAY_DATA_DIR),
-    chatDb: value.IMESSAGE_CHAT_DB.replace(/^~/, process.env.HOME ?? "")
+    chatDb: value.IMESSAGE_CHAT_DB.replace(/^~/, env.HOME ?? process.env.HOME ?? "")
   };
 }

@@ -22,12 +22,21 @@ const nativeModelsSchema = z.object({
 
 const loadResponseSchema = z.object({
   type: z.enum(["llm", "embedding"]),
-  instance_id: z.string().min(1),
+  instance_id: z.string().min(1).optional(),
+  model_instance_id: z.string().min(1).optional(),
   status: z.literal("loaded"),
   load_time_seconds: z.number().nonnegative().optional()
+}).superRefine((value, context) => {
+  if (!value.instance_id && !value.model_instance_id) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "LM Studio load response is missing its model instance identifier"
+    });
+  }
 });
 
 const completionSchema = z.object({
+  model: z.string().min(1),
   choices: z.array(z.object({
     finish_reason: z.string().nullable().optional(),
     message: z.object({ content: z.string() })
@@ -145,6 +154,7 @@ export class LmStudioClient {
 
   private headers(hasBody: boolean): Record<string, string> {
     return {
+      "X-WP-Homepage-Agent-Run-ID": this.logger.runId,
       ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(this.settings.apiToken ? { Authorization: `Bearer ${this.settings.apiToken}` } : {})
     };
@@ -183,6 +193,8 @@ export class LmStudioClient {
             ? "authentication"
             : response.status === 404 && requestPath.startsWith("/api/v1/")
               ? "api-version"
+              : response.status === 408
+                ? "timeout"
               : response.status === 429
                 ? "rate-limit"
                 : [500, 502, 503, 504].includes(response.status)
@@ -264,10 +276,11 @@ export class LmStudioClient {
         if (!parsed.success || parsed.data.type !== "llm") {
           throw new LmStudioError("invalid-response", `LM Studio did not confirm an LLM load for ${key}`);
         }
-        this.selection = { key, instanceId: parsed.data.instance_id };
+        const instanceId = parsed.data.model_instance_id ?? parsed.data.instance_id!;
+        this.selection = { key, instanceId };
         await this.logger.write("lmstudio.model_loaded", {
           model_key: key,
-          model_instance_id: parsed.data.instance_id,
+          model_instance_id: instanceId,
           load_time_seconds: parsed.data.load_time_seconds,
           connection_mode: this.settings.connectionMode
         });
@@ -315,6 +328,12 @@ export class LmStudioClient {
     const parsed = completionSchema.safeParse(response.value);
     if (!parsed.success) throw new LmStudioError("invalid-response", "LM Studio returned an invalid Chat Completions response");
     const choice = parsed.data.choices[0]!;
+    if (parsed.data.model !== selection.instanceId && parsed.data.model !== selection.key) {
+      throw new LmStudioError(
+        "invalid-response",
+        `LM Studio completed with unexpected model identifier ${parsed.data.model}`
+      );
+    }
     const finishReason = choice.finish_reason ?? "unknown";
     if (finishReason !== "stop") {
       throw new LmStudioError("incomplete-response", `LM Studio response ended with finish_reason=${finishReason}`);
@@ -338,6 +357,7 @@ export class LmStudioClient {
       request_kind: requestKind,
       model_key: selection.key,
       model_instance_id: selection.instanceId,
+      response_model_identifier: parsed.data.model,
       duration_ms: metadata.duration_ms,
       retry_count: metadata.retry_count,
       finish_reason: finishReason,

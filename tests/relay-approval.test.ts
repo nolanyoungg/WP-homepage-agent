@@ -11,6 +11,7 @@ const servers: Array<{ close(): Promise<void> }> = [];
 class ContractAdapter implements MessageAdapter {
   readonly deliveries = new Map<string, string>();
   fail = false;
+  replies?: RelayMessage[];
 
   async healthCheck(): Promise<void> {
     if (this.fail) throw new Error("private database detail");
@@ -27,7 +28,7 @@ class ContractAdapter implements MessageAdapter {
 
   async incoming(since: string): Promise<RelayMessage[]> {
     void since;
-    return [{
+    return this.replies ?? [{
       id: "reply-1",
       text: "YES homepage-001 nonce123 — make this preview the Local site's homepage",
       sender: recipient,
@@ -76,6 +77,26 @@ describe("shared relay contract", () => {
     expect(body).not.toContain("database");
     expect(body).toContain("Relay operation failed");
   });
+
+  test("rejects oversized relay responses before returning adapter data", async () => {
+    const adapter = new ContractAdapter();
+    adapter.replies = Array.from({ length: 100 }, (_, index) => ({
+      id: `reply-${index}`,
+      text: "review",
+      sender: `+1${"5".repeat(25_000)}`,
+      receivedAt: "2026-07-25T12:01:00.000Z"
+    }));
+    const server = await startRelayServer({ adapter, token, recipient, port: 0 });
+    servers.push(server);
+    const response = await fetch(`${server.url}/v1/replies`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: "Relay response exceeded the safety limit"
+    });
+  });
 });
 
 describe("approval decisions", () => {
@@ -91,6 +112,7 @@ describe("approval decisions", () => {
     expect(parseApproval({ ...base, sender: "+15550000000" }, "homepage-001", "nonce123", recipient, requestedAt)).toBeUndefined();
     expect(parseApproval({ ...base, receivedAt: requestedAt }, "homepage-001", "nonce123", recipient, requestedAt)).toBeUndefined();
     expect(parseApproval({ ...base, text: base.text.replace("nonce123", "wrong") }, "homepage-001", "nonce123", recipient, requestedAt)).toBeUndefined();
+    expect(parseApproval({ ...base, text: `${base.text}\n` }, "homepage-001", "nonce123", recipient, requestedAt)).toBeUndefined();
   });
 
   test("can omit the Live Link password from the approval message", () => {

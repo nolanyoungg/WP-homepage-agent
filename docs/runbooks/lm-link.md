@@ -6,7 +6,8 @@ workflow device; LM Studio performs linked-device model resolution.
 
 ## Link the devices
 
-1. Install and open LM Studio 0.4.0 or newer on both devices.
+1. Install and open LM Studio 0.4.8 or newer on both devices and confirm the
+   installed version in each app.
 2. On the inference device, download and load the explicitly approved LLM.
 3. Use LM Studio's LM Link page to create a link and add the workflow device.
 4. On the workflow device, confirm connection state and connected peers:
@@ -36,7 +37,8 @@ LMSTUDIO_PRIMARY_MODEL=openai/gpt-oss-20b
 LMSTUDIO_FALLBACK_MODELS=
 LMSTUDIO_MODEL_POLICY=required-loaded
 LMSTUDIO_REASONING=low
-LMSTUDIO_MIN_VERSION=0.4.0
+LMSTUDIO_MIN_VERSION=0.4.8
+LMSTUDIO_CONFIRMED_VERSION=0.4.8
 ```
 
 LM Link mode rejects non-loopback `LMSTUDIO_BASE_URL` values. It does not fall

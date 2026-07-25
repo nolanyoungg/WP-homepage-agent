@@ -9,6 +9,7 @@ import type { MessageAdapter } from "../domain/types.js";
 const maxBodyBytes = 12 * 1024 * 1024;
 const maxMessageCharacters = 10_000;
 const maxAttachmentBytes = 8 * 1024 * 1024;
+const maxResponseBytes = 2 * 1024 * 1024;
 
 class RelayRequestError extends Error {
   constructor(readonly status: number, message: string) {
@@ -17,12 +18,17 @@ class RelayRequestError extends Error {
 }
 
 function reply(response: ServerResponse, status: number, value: unknown): void {
+  let body = JSON.stringify(value);
+  if (Buffer.byteLength(body) > maxResponseBytes) {
+    status = 500;
+    body = JSON.stringify({ ok: false, error: "Relay response exceeded the safety limit" });
+  }
   response.writeHead(status, {
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"
   });
-  response.end(JSON.stringify(value));
+  response.end(body);
 }
 
 function authorized(request: IncomingMessage, expectedToken: string): boolean {
