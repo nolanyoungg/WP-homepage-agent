@@ -256,3 +256,26 @@
 - 2026-07-24 16:06 America/New_York: Added deterministic transition coverage for validated post-install resume.
 - 2026-07-24 16:00 America/New_York: Revalidated all eleven installed files, created preview Page ID 22, assigned the generated page template, and confirmed Local plus authenticated Live Link HTTP 200 at `/nolan-young-web-design/`.
 - 2026-07-24 16:01 America/New_York: Confirmed the tracker stopped at `blocked_review_delivery` solely for the unconfigured macOS relay and that the static front-page settings remained `posts` / Page ID `0`.
+
+## 0.1.11 - 2026-07-24 22:41 America/New_York
+
+### Added
+
+- Add repository-scoped `AGENTS.md` instructions that establish LM Studio and LM Link as the only supported model providers.
+
+### Changed
+
+- Make official LM Studio documentation, repository validation, README review, and timestamped changelog maintenance explicit workflow requirements.
+
+### Fixed
+
+- Remove ambiguity about which model providers and documentation sources are authoritative for future repository work.
+
+### Removed
+
+- Remove reliance on instruction context that exists only outside the repository.
+
+### Tested
+
+- 2026-07-24 22:41 America/New_York: Reviewed `README.md` against the current scripts, environment reference, LM Studio integration, failure recovery, and first-run behavior; no README correction was required.
+- 2026-07-24 22:42 America/New_York: Passed TypeScript build, ESLint, all 14 Vitest checks, JSON parsing, environment-template validation, and Git whitespace validation.
