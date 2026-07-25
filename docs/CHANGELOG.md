@@ -35,6 +35,8 @@
   template, manifest, files, checksums, and front-page settings before recovery.
 - Version the application as `0.2.0` and align package, environment, README,
   validation, release, and changelog surfaces.
+- Use the Node 24 runtime releases of GitHub's official checkout and setup-node
+  actions while continuing to test the application itself on supported Node 20.
 
 ### Fixed
 
@@ -82,6 +84,10 @@
   run, WordPress, Live Link, and Messages validation remained unexecuted on
   this development host because no private `.env`/runtime variables or `lms`
   CLI were available; no live-integration success is claimed.
+- 2026-07-25 14:01 America/New_York: The first pull-request
+  `deterministic-validation` run passed; upgraded the two official GitHub
+  Actions to their Node 24 runtime releases to remove the runner's Node 20
+  action-deprecation annotation before final CI validation.
 
 ## 0.1.0 - 2026-07-24
 
