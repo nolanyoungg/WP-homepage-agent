@@ -1,80 +1,207 @@
 # WP Homepage Agent
 
-A local-first TypeScript worker that turns one Excel tracker row into one WordPress homepage preview. It generates with an already-installed LM Studio model, writes only to the designated Local theme, requests approval through a user-owned macOS iMessage relay, and changes the Local static front page only after an exact matching approval.
+WP Homepage Agent is a local-first TypeScript worker that turns an Excel tracker
+row into a reviewable WordPress homepage. It uses only LM Studio or LM Link,
+installs generated files only in the designated Local theme, and changes the
+static front page only after an exact approval reply.
 
-It does **not** create blog posts, articles, categories, tags, production content, plugins, or unrelated automation.
+It does not create blog posts, use cloud model providers, download models
+automatically, simulate inference, or trust model output as executable code.
 
-## Safety boundary
+## Safety model
 
-The only permitted theme is:
+- The only writable theme is
+  `<LOCAL_WORDPRESS_ROOT>/wp-content/themes/nolan-young-theme-template-02`.
+- A complete preflight runs before a `pending` tracker row is claimed.
+- Generated model output is parsed as HTML and checked against element,
+  attribute, and URL allowlists. PHP wrappers and template calls are constructed
+  deterministically.
+- Eleven PHP artifacts must pass path containment, exact manifest matching,
+  safety scans, `php -l`, and SHA-256 checks before installation.
+- Existing destination files are reused only when byte-identical; a partial
+  installation is rolled back.
+- Preview Pages carry `_wp_homepage_agent_id` ownership metadata. The worker
+  refuses a slug, Page ID, or page template owned by another homepage.
+- Front-page settings are captured, verified after mutation, and restored if
+  verification fails.
+- Tokens and passwords are redacted from JSONL logs and are never written to
+  generated PHP or manifests.
 
-`C:\Users\NolanYoung\Local Sites\7-20-wp-playground\app\public\wp-content\themes\nolan-young-theme-template-02`
+## Requirements
 
-The worker resolves and compares that path before work, validates every destination, and refuses any other theme. Generated PHP cannot perform HTTP, filesystem, shell, database, or WordPress-option writes. The worker does not enable Local Live Links. Existing homepage files are not deleted.
+- Node.js 20 or newer
+- PHP available on `PATH`
+- WP-CLI and a running Local WordPress site
+- LM Studio 0.4.0 or newer, or LM Link between the workflow and inference
+  devices
+- The approved LLM already downloaded; the default policy also requires it to
+  be loaded
+- A configured Local Live Link
+- For approval messaging: the integrated Mac relay or direct macOS Messages
+  adapter
 
-## GRASS10 first run
+LM Studio's native v1 API and API-token support began in 0.4.0. The worker
+requires `/api/v1/models`, so older installations fail preflight instead of
+silently using another API. The documented API does not expose the desktop app
+version; confirm the installed version in LM Studio and keep
+`LMSTUDIO_MIN_VERSION=0.4.0` or higher.
 
-Requirements: Windows GRASS10, Node.js 20+, PHP on `PATH`, WP-CLI available as `wp` (or Local installed in its standard Windows location; the worker discovers the active site PHP/php.ini, suppresses broken optional-extension startup display, and accepts only numeric Page IDs), the configured Local site running, Local Live Link already enabled, and LM Studio serving the selected already-downloaded model through its OpenAI-compatible local API.
+## First run
 
-1. Copy `.env.example` to `.env`. Keep `.env` untracked.
-2. Replace the Live Link placeholder credentials. Never put those credentials in Excel, source, logs, manifests, screenshots, or commits.
-3. Configure `IMESSAGE_RELAY_URL`, `IMESSAGE_RELAY_TOKEN`, and `IMESSAGE_RECIPIENT` after setting up the Mac relay in `relay/README.md`.
-4. Install and verify:
+1. Copy `.env.example` to `.env` and replace every placeholder. `.env` and all
+   private `.env.*` variants are ignored.
+2. Install dependencies and create a tracker if needed:
 
    ```powershell
-   npm install
-   npm run build
-   npm run lint
-   npm test
-   npm run homepage:dry-run
+   npm ci
+   npm run tracker:create
    ```
 
-5. Open `manual-files/wordpress-homepage-tracker.xlsx`, fill one row's `homepage_id` and `homepage_idea`, keep `homepage_status` as `pending`, and optionally set `target_theme_path` to the exact designated theme.
-6. Close Excel before running the worker, then run `npm run homepage:once`.
+3. Add a safe `homepage_id`, a homepage idea of at most 4,000 characters, and
+   `pending` status to the tracker. Close Excel before starting the worker.
+4. Validate deterministic code and the real configured model:
 
-The first invocation claims one row, generates and validates eleven PHP files, installs them into the designated theme, creates/updates a published Local preview Page, verifies its direct Local and Live Link URLs, sends the approval request, and exits in `awaiting_review`. Run the command again to read a reply. A scheduler may invoke it periodically, but concurrent workers are prevented by an adjacent tracker lock file.
+   ```powershell
+   npm run validate
+   npm run audit:dependencies
+   npm run lmstudio:check
+   npm run lmstudio:smoke
+   ```
+
+5. Run once or start the continuous worker:
+
+   ```powershell
+   npm run homepage:once
+   npm run homepage:worker
+   ```
+
+The worker claims one pending row, plans ten sections, checkpoints each
+completed section, validates and installs the artifacts, creates or adopts its
+owned preview Page, checks the Local and Live Link URLs, and sends a review
+request. Run-once mode exits; worker mode polls until `SIGINT` or `SIGTERM`.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run build` | Compile TypeScript. |
+| `npm run lint` | Run ESLint. |
+| `npm run test` | Run deterministic tests; no fake model is used. |
+| `npm run validate` | Build, lint, test, and validate repository consistency. |
+| `npm run audit:dependencies` | Enforce the documented production-advisory policy. |
+| `npm run tracker:create -- path/to/tracker.xlsx` | Create the versioned tracker schema. |
+| `npm run homepage:once -- --tracker path/to/tracker.xlsx` | Process at most one workflow item. |
+| `npm run homepage:worker -- --tracker path/to/tracker.xlsx` | Poll continuously with graceful shutdown and idle backoff. |
+| `npm run homepage:status -- --tracker path/to/tracker.xlsx` | Print read-only tracker status as JSON. |
+| `npm run homepage:reconcile -- --id ID` | Compare tracker, manifest, installed checksums, preview ownership, and WordPress front-page state. |
+| `npm run homepage:retry -- --id ID` | Move an eligible `error` row to its evidence-based recovery state. |
+| `npm run lmstudio:check` | Check LM Link when configured, native v1 API access, approved model type/capabilities, and loaded-model policy. |
+| `npm run lmstudio:smoke` | Wait for a real model completion and require the exact smoke response. |
+| `npm run homepage:dry-run -- --output DIRECTORY --tracker COPY.xlsx` | Use the real model with a copied tracker and a new isolated run directory; do not install or message. |
+| `npm run relay` | Run the authenticated TypeScript Messages relay on macOS. |
+
+`homepage:retry` removes the need to edit recovery states manually. It never
+approves a homepage and never bypasses ownership, validation, or URL checks.
+
+## Tracker states and recovery
+
+Normal generation uses:
+
+`pending → planning → generating → validating → awaiting_review → approved → installing → installed`
+
+Other terminal or recovery states are `rejected`, `error`, and
+`blocked_review_delivery`.
+
+- Plan and section checkpoints live under
+  `data/homepages/<homepage_id>/.checkpoint/`.
+- Every checkpoint binds the homepage idea, model key and instance, theme,
+  prompt version, plan checksum, manifest, and completed section checksums.
+- Compatible sections are reused after interruption. Changed inputs invalidate
+  the checkpoint; expired checkpoint directories are removed during preflight.
+- If WordPress preview creation succeeded before tracker persistence failed,
+  ownership metadata lets the next validation recovery adopt the same Page.
+- If delivery succeeded before tracker persistence failed, the persistent
+  idempotency key prevents a duplicate message.
+- If WordPress settings changed but final verification failed, the previous
+  settings are restored and the row becomes retryable `error`.
+
+Use `homepage:status`, then `homepage:reconcile`, and finally `homepage:retry`
+when the evidence supports recovery.
 
 ## Approval behavior
 
-Only these exact messages from the configured sender, received after `review_requested_at`, are accepted:
+The message contains a short nonce derived from the private review token. Only
+an exact reply from `IMESSAGE_RECIPIENT`, received after the request timestamp,
+is accepted:
 
 ```text
-YES <homepage_id> — make this preview the Local site's homepage
-NO <homepage_id> — reject it and leave the current Local homepage unchanged
+YES <homepage_id> <nonce> — make this preview the Local site's homepage
+NO <homepage_id> <nonce> — reject it and leave the current Local homepage unchanged
 ```
 
-`NO` marks the row rejected without changing the homepage. `YES` sets `show_on_front=page` and `page_on_front` to that exact preview Page ID, verifies the Local homepage response, and only then marks `installed`. Wrong senders, stale messages, whitespace/content changes, and mismatched IDs are ignored. If relay delivery fails, the row becomes `blocked_review_delivery`; a later run retries delivery but never changes the homepage.
+A send failure becomes `blocked_review_delivery`; subsequent runs retry the
+same idempotency key and record attempt count, timestamp, delivery ID, and
+duplicate status in local state and JSONL logs. Set
+`IMESSAGE_INCLUDE_LIVE_LINK_PASSWORD=false` to keep the password out of the
+message. `IMESSAGE_ADAPTER=dry-run` never sends or supplies an approval.
 
-## Tracker and generated data
+## LM Studio and LM Link
 
-The versioned workbook uses the `Homepage tracker` worksheet and the required 18-column schema. The canonical manifest is stored at `data/homepages/<homepage_id>/manifest.json`. Generated files are staged under ignored `.staging/` and installed as:
+The worker sends API tokens on every LM Studio request when
+`LMSTUDIO_API_TOKEN` is set. It uses:
 
-- `page-templates/page-template-home-page-MM-DD-YYYY.php`
-- ten unique `template-parts/homepage/content-template-<homepage-slug>-NN-<purpose>.php` files
+- `GET /api/v1/models` for the approved model, LLM type, loaded instance, and
+  reasoning capability
+- `POST /api/v1/models/load` only when
+  `LMSTUDIO_MODEL_POLICY=load-installed`
+- `POST /v1/chat/completions` for one bounded plan request and ten independently
+  bounded HTML-section requests
 
-The manifest records ordering, purposes, model, generation time, and SHA-256 checksums. Live Link credentials are never persisted by the worker.
+Fallbacks are considered only in the explicit ordered
+`LMSTUDIO_FALLBACK_MODELS` allowlist. There is no arbitrary selection, download
+endpoint, cloud fallback, or LM Link fallback to direct LAN. Structured plan
+output is opt-in; Zod validation and one targeted repair attempt always remain.
 
-## LM Studio and failure recovery
+See:
 
-`homepage:dry-run` is read-only and checks configuration, workbook schema, the exact theme directory, LM Studio/model availability, WP-CLI, the Live Link with in-memory credentials, and the required relay. The real worker never downloads a model and has no mock or cloud provider. The concise plan and each of the ten unique section fragments use separate bounded requests through LM Studio's official [OpenAI-compatible Chat Completions endpoint](https://lmstudio.ai/docs/developer/openai-compat/chat-completions). Only the small plan uses a JSON envelope and is validated with Zod. LM Studio returns static semantic HTML—not executable PHP—for each section; the worker rejects PHP tags, scripts, styles, forms, remote URLs, JavaScript URLs, and inline event handlers, then adds a deterministic ABSPATH-guarded PHP wrapper. The page template and its ten manifest-ordered `get_template_part()` calls are constructed deterministically. Generic model slugs such as `home` fall back to the validated plan title. Non-`stop` finish reasons are rejected, safe LM Studio error messages and named PHP safety-rule violations are retained for diagnosis, a fixed inference seed improves reproducibility, and every PHP result still passes manifest matching, exact-file-count checks, safety scans, path containment, `php -l`, and checksum generation before installation. The worker requests low reasoning effort using current documented [GPT-OSS chat-completions support](https://lmstudio.ai/changelog/lmstudio-v0.4.8). Errors are redacted and recorded in `last_error`. If all eleven validated files were already installed but preview creation failed, the next run automatically copies those exact installed files into temporary staging, revalidates PHP/safety/checksums, and resumes preview creation without calling the model or overwriting the theme. Earlier generation errors still require deliberate reset to `pending`. Do not edit a workbook while the worker is running.
+- [Direct-LAN runbook](docs/runbooks/direct-lan.md)
+- [LM Link runbook](docs/runbooks/lm-link.md)
+- [Windows workflow and Mac relay runbook](docs/runbooks/windows-mac-relay.md)
 
-## macOS relay
+## Real-model validation
 
-See `relay/README.md` for the authenticated HTTP contract and setup. The minimal relay sends using Messages automation and reads incoming replies from the local Messages database. The Mac process needs Messages Automation and Full Disk Access. Use a trusted LAN/VPN or TLS reverse proxy; never expose the plain HTTP relay directly to the internet.
+Deterministic tests do not simulate LM Studio. Live validation is separate:
 
-## Environment variable reference
+1. Run `npm run lmstudio:check`.
+2. In another terminal, correlate the JSONL timestamps in `data/runs/` with:
 
-The private `.env` file is required at runtime and is ignored by Git. Create it from `.env.example`, then replace every placeholder. Do not paste real Live Link credentials or relay tokens into the workbook, manifests, generated PHP, screenshots, issue reports, or committed documentation.
+   ```sh
+   lms log stream --source server --json
+   lms log stream --source model --filter input,output --stats
+   ```
 
-- `LMSTUDIO_BASE_URL` is the LAN URL for LM Studio's local OpenAI-compatible API. The worker calls `GET /v1/models` and `POST /v1/chat/completions` only at this local endpoint.
-- `LMSTUDIO_PRIMARY_MODEL` is the exact model ID that must already be present in LM Studio. A missing model blocks work; the worker does not download one.
-- `TRACKER_PATH` points to the `.xlsx` work queue. Relative paths resolve from the repository root.
-- `LOCAL_WORDPRESS_ROOT` is the `app/public` directory of the designated Local site. It scopes every WP-CLI command.
-- `THEME_PATH` is the only writable theme target. This project deliberately requires `nolan-young-theme-template-02` under the configured WordPress root.
-- `LIVE_LINK_URL` is the Live Link origin shown by Local, without a preview Page suffix. The worker combines it with the generated Page path.
-- `LIVE_LINK_USERNAME` and `LIVE_LINK_PASSWORD` are Local Live Link access credentials. They stay in process memory and are redacted from worker logs.
-- `IMESSAGE_RELAY_URL` is the Mac relay origin, normally `http://<mac-lan-ip>:8787` on a trusted network.
-- `IMESSAGE_RELAY_TOKEN` is the shared bearer token configured identically on GRASS10 and the Mac. Use a random value of at least 24 characters.
-- `IMESSAGE_RECIPIENT` is the exact phone number or Apple ID address used by Messages. E.164 formatting such as `+15551234567` is recommended because reply sender matching is exact.
+   Model logs contain prompt/output content; do not paste them into tickets.
+3. Run `npm run lmstudio:smoke` and wait for completion.
+4. Copy the tracker, leave one copied row pending, then run the isolated
+   `homepage:dry-run` command.
+5. Open the reported staging directory. Confirm one page template and ten
+   section files, inspect all content, and compare the manifest checksums and
+   inference metadata.
 
-Leaving any relay field blank prevents iMessage delivery. The worker then records `blocked_review_delivery` and will never change the static homepage until the relay is configured and an exact, fresh approval reply is received.
+A passing build or unit suite does not prove a live model, LM Link, Messages,
+Live Link, or WordPress integration.
+
+## Repository policy
+
+The repository is intentionally public and licensed under MIT. Do not commit
+trackers containing private business data, generated run state, credentials,
+machine names, personal paths, IP addresses, model logs, or screenshots with
+Live Link credentials. See [SECURITY.md](SECURITY.md),
+[dependency risk](docs/DEPENDENCY-RISK.md), and
+[release guidance](docs/RELEASES.md).
+
+Official references: [LM Studio API](https://lmstudio.ai/docs/developer/rest),
+[authentication](https://lmstudio.ai/docs/developer/core/authentication),
+[Chat Completions](https://lmstudio.ai/docs/developer/openai-compat/chat-completions),
+[LM Link](https://lmstudio.ai/docs/developer/core/lmlink), and
+[`lms` CLI](https://lmstudio.ai/docs/cli).

@@ -1,5 +1,88 @@
 # Changelog
 
+## [0.2.0] - 2026-07-25
+
+### Added
+
+- Add LM Studio API-token authentication, explicit transport/model policies,
+  approved fallback allowlists, model-instance/capability checks, separate
+  timeouts, classified retries, real smoke checks, and first-class LM Link
+  validation.
+- Add prompt/inference provenance, JSONL run logs, safe error categories,
+  bounded configurable tokens/concurrency, one plan-repair attempt, parsed HTML
+  allowlists, and unique homepage-aware filenames.
+- Add resumable plan/section checkpoints with checksums, invalidation, expiry,
+  isolated real-model dry runs, persistent approval-delivery attempts, and
+  evidence-based retry/reconciliation commands.
+- Add the integrated TypeScript Messages relay, direct-macOS and no-send
+  adapters, attachment/reply limits, request/response timeouts, idempotency,
+  nonce-bound approvals, and optional Live Link password omission.
+- Add a continuous graceful worker, stale tracker/worker lease recovery,
+  pre-claim preflight, safe idle backoff, read-only status, and Windows Task
+  Scheduler instructions.
+- Add focused deterministic suites, GitHub Actions, Dependabot, dependency-risk
+  policy, Security policy, MIT license, release guidance, launchd example, and
+  separate direct-LAN, LM Link, and Windows-to-Mac runbooks.
+
+### Changed
+
+- Reorganize the TypeScript source into CLI, config, domain, generation, LM
+  Studio, logging, messaging, runtime, tracker, validation, WordPress, and
+  workflow modules with narrow external-system interfaces.
+- Use LM Studio's native `/api/v1/models` response as the authoritative model
+  inventory and use the actual loaded instance for Chat Completions.
+- Require WordPress preview ownership metadata and validate/reconcile the Page,
+  template, manifest, files, checksums, and front-page settings before recovery.
+- Version the application as `0.2.0` and align package, environment, README,
+  validation, release, and changelog surfaces.
+
+### Fixed
+
+- Reject duplicate homepage IDs, same-day filename collisions, unsafe SVG/
+  active HTML, mixed unsafe `srcset` values, protocol-relative URLs, stale
+  locks, and unbounded subprocess execution.
+- Roll back partial theme copies and partially changed WordPress front-page
+  settings, and safely recover preview creation, approval persistence, and
+  final-verification failures without model regeneration.
+- Redact LM Studio/relay/Live Link secrets from run logs and tracker errors and
+  remove personal machine paths, IP addresses, and runtime artifacts from
+  public examples.
+
+### Removed
+
+- Remove the duplicate flat source implementation and standalone JavaScript
+  relay package.
+- Remove the committed generated homepage manifest and replace runtime data with
+  ignored per-homepage/checkpoint/run directories.
+- Remove documentation that implied deterministic checks proved live LM Studio,
+  LM Link, WordPress, Live Link, or Messages behavior.
+
+### Tested
+
+- 2026-07-25 13:35 America/New_York: Compiled the reorganized strict TypeScript
+  project after adding the new command, workflow, checkpoint, relay, and
+  reconciliation surfaces.
+- 2026-07-25 13:44 America/New_York: Exercised configuration, duplicate IDs,
+  stale locks, atomic tracker failure, generated HTML safety, filename
+  collisions, checkpoints, partial install rollback, relay compatibility, and
+  exact approval decisions.
+- 2026-07-25 13:48 America/New_York: Passed all 27 deterministic Vitest checks
+  after adding persistent delivery-attempt evidence and the workflow lease.
+- 2026-07-25 13:49 America/New_York: Passed strict TypeScript compilation and
+  ESLint after removal of the superseded flat modules.
+- 2026-07-25 13:56 America/New_York: Enabled GitHub private vulnerability
+  reporting and protected `main` with required pull requests, the strict
+  `deterministic-validation` check, resolved conversations, administrator
+  enforcement, and force-push/deletion prevention.
+- 2026-07-25 13:58 America/New_York: Passed the complete local validation gate
+  with strict compilation, ESLint, all 30 deterministic tests (including
+  `php -l` over all eleven staged artifacts), repository consistency, the
+  reviewed production-dependency policy, and `git diff --check`.
+- 2026-07-25 13:59 America/New_York: Live LM Studio, LM Link, real-model dry
+  run, WordPress, Live Link, and Messages validation remained unexecuted on
+  this development host because no private `.env`/runtime variables or `lms`
+  CLI were available; no live-integration success is claimed.
+
 ## 0.1.0 - 2026-07-24
 
 - Add the local-only TypeScript homepage workflow and Excel tracker.

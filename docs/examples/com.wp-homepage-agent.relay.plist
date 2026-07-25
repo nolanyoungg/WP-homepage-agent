@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.wp-homepage-agent.relay</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>REPLACE_NODE_PATH</string>
+    <string>REPLACE_REPOSITORY_PATH/node_modules/tsx/dist/cli.mjs</string>
+    <string>REPLACE_REPOSITORY_PATH/src/cli/relay.ts</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>REPLACE_REPOSITORY_PATH</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>IMESSAGE_RELAY_TOKEN</key>
+    <string>REPLACE_PRIVATE_TOKEN</string>
+    <key>IMESSAGE_RECIPIENT</key>
+    <string>REPLACE_RECIPIENT</string>
+    <key>IMESSAGE_RELAY_TIMEOUT_MS</key>
+    <string>30000</string>
+    <key>IMESSAGE_RELAY_LISTEN_HOST</key>
+    <string>127.0.0.1</string>
+    <key>IMESSAGE_RELAY_LISTEN_PORT</key>
+    <string>8787</string>
+    <key>IMESSAGE_RELAY_DATA_DIR</key>
+    <string>REPLACE_PRIVATE_DATA_PATH</string>
+    <key>IMESSAGE_CHAT_DB</key>
+    <string>REPLACE_HOME_PATH/Library/Messages/chat.db</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>StandardOutPath</key>
+  <string>REPLACE_PRIVATE_LOG_PATH/relay.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>REPLACE_PRIVATE_LOG_PATH/relay.stderr.log</string>
+</dict>
+</plist>

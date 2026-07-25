@@ -2,9 +2,15 @@ import eslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "relay/**"] },
+  { ignores: ["dist/**", "node_modules/**", "data/**", ".staging/**"] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly" }
+    }
+  },
   {
     files: ["**/*.ts"],
     languageOptions: {
