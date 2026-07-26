@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.1.12 - 2026-07-26
+
+### Added
+
+- Add an explicit repository policy that fixture-based and simulated validation
+  belongs outside this repository.
+
+### Changed
+
+- Use compilation, linting, and the real LM Studio/LM Link, WordPress, Live
+  Link, and Messages operator path as the supported validation approach.
+
+### Fixed
+
+- Align the package version with the latest recorded maintenance release before
+  beginning further runtime work.
+
+### Removed
+
+- Remove the committed `tests/` directory, Vitest dependency, `npm test`
+  command, and test-only TypeScript configuration.
+
+### Tested
+
+- 2026-07-26 02:06 America/New_York: Confirmed the cleanup starts from
+  unchanged `main`, with draft PR #2 closed and its branch retained only as a
+  recovery reference.
+- 2026-07-26 02:09 America/New_York: Passed strict TypeScript compilation,
+  ESLint, and Git whitespace validation after removing the test harness and
+  pruning Vitest from the npm lockfile.
+
 ## 0.1.0 - 2026-07-24
 
 - Add the local-only TypeScript homepage workflow and Excel tracker.
@@ -7,7 +38,7 @@
 - Add manifest, exact-eleven-file PHP validation, path containment, checksums, and transactional theme installation.
 - Add WP-CLI preview Page management, Live Link checks, exact iMessage approval gating, and static-front-page verification.
 - Add the authenticated macOS Messages relay contract and minimal implementation.
-- Add safety tests and first-run documentation.
+- Add first-run documentation.
 
 ## 0.1.1 - 2026-07-24 15:08 America/New_York
 

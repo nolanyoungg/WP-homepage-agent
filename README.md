@@ -25,7 +25,6 @@ Requirements: Windows GRASS10, Node.js 20+, PHP on `PATH`, WP-CLI available as `
    npm install
    npm run build
    npm run lint
-   npm test
    npm run homepage:dry-run
    ```
 
@@ -33,6 +32,12 @@ Requirements: Windows GRASS10, Node.js 20+, PHP on `PATH`, WP-CLI available as `
 6. Close Excel before running the worker, then run `npm run homepage:once`.
 
 The first invocation claims one row, generates and validates eleven PHP files, installs them into the designated theme, creates/updates a published Local preview Page, verifies its direct Local and Live Link URLs, sends the approval request, and exits in `awaiting_review`. Run the command again to read a reply. A scheduler may invoke it periodically, but concurrent workers are prevented by an adjacent tracker lock file.
+
+This repository does not contain a fixture-based or simulated test suite.
+Validation uses compilation, linting, and the real operator workflow with LM
+Studio or LM Link, a copied tracker, a disposable Local WordPress site, Live
+Link, and the configured Messages transport. Private validation notes and
+runtime credentials stay outside this repository.
 
 ## Approval behavior
 
