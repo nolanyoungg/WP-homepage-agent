@@ -31,3 +31,4 @@ export const PART_SPECS = [
 ] as const;
 
 export const EXPECTED_THEME_DIRECTORY = "nolan-young-theme-template-02";
+export const PROMPT_VERSION = "homepage-v2-2026-07-25";

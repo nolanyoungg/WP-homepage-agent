@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.2.0 - 2026-07-26
+
+### Added
+
+- Add LM Studio native model discovery, optional token authentication, approved
+  model selection, explicit fallback allowlists, capability checks, bounded
+  retries, and real smoke/preflight commands.
+- Add first-class LM Link, direct-LAN, and Windows-to-Mac relay runbooks.
+- Add resumable generation checkpoints, structured JSONL run logs, a worker,
+  status/reconciliation/retry commands, and isolated real-model dry runs.
+- Add the integrated TypeScript Messages relay with idempotent delivery,
+  bounded requests and replies, nonce-bound approvals, macOS and no-send
+  adapters, and a launchd example.
+- Add WordPress preview ownership checks, rollback-aware front-page updates,
+  safe generated-artifact installation, and Live Link redirect containment.
+
+### Changed
+
+- Reorganize the runtime into CLI, config, domain, generation, LM Studio,
+  logging, messaging, runtime, tracker, validation, WordPress, and workflow
+  modules with narrow external boundaries.
+- Use LM Studio 0.4.8+ native model/capability semantics and the actual loaded
+  model instance for Chat Completions.
+- Keep operational validation outside the repository, using the private
+  operator guide and real services rather than fixture-based test code.
+
+### Fixed
+
+- Redact credentials from logs and child-process environments, reject unsafe
+  service origins and generated HTML, prevent symlinked theme-path escapes,
+  and require exact approval replies.
+- Preserve useful checkpoint and staging evidence after recoverable failures,
+  correctly parse WP-CLI Page IDs, and reject authenticated Live Link redirects
+  outside the configured origin.
+
+### Removed
+
+- Remove the standalone JavaScript relay and replace it with the integrated
+  TypeScript relay.
+- Remove committed test infrastructure from the application repository;
+  validation artifacts now live only in the private operator workspace.
+
+### Tested
+
+- 2026-07-26 02:19 America/New_York: Passed strict TypeScript compilation,
+  ESLint, dependency-policy validation, and Git whitespace checks after the
+  runtime rebuild without a committed test harness.
+- 2026-07-26 02:19 America/New_York: Live LM Studio, LM Link, WordPress, Live
+  Link, and Messages validation remains pending until the private configured
+  operator environment is available; no simulated inference result is claimed.
+
 ## 0.1.12 - 2026-07-26
 
 ### Added

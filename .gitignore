@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
 *.log
-.tracker-lock
+*.lock
 .staging/
 .DS_Store
-relay/data/
+data/homepages/
+data/runs/
+relay-data/
