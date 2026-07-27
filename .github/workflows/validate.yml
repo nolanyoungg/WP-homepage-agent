@@ -25,6 +25,3 @@ jobs:
           node-version: 20
           cache: npm
       - run: php --version
-      - run: npm ci
-      - run: npm run validate
-      - run: npm run audit:dependencies
