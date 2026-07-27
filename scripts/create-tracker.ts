@@ -1,5 +1,6 @@
 import path from "node:path";
-import { createStarterTracker } from "../src/tracker.js";
+import { createStarterTracker } from "../src/tracker/store.js";
 
-await createStarterTracker(path.resolve("manual-files/wordpress-homepage-tracker.xlsx"));
-console.log("Created manual-files/wordpress-homepage-tracker.xlsx");
+const output = path.resolve(process.argv[2] ?? "manual-files/wordpress-homepage-tracker.xlsx");
+await createStarterTracker(output);
+process.stdout.write(`Created ${output}\n`);
